@@ -1,6 +1,6 @@
 # fx-review
 
-> 🌐 在线使用：[review.feixing.io](https://review.feixing.io)
+> 🌐 在线使用：[review.feixing.io](https://review.feixing.io) ｜ 📖 [English](./README.en.md)
 
 网页版 Markdown 批注审阅工具。拖入本地 Markdown 文件 → 在渲染后的文字上做 CriticMarkup 批注 → 一键复制或下载带批注的全文，交给 AI 修改。无需下载安装，设备无关，部署在 Cloudflare Pages 上。
 
