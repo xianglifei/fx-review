@@ -42,6 +42,16 @@ class Store {
     this.notify();
   }
 
+  /** 静默更新评论备注，不触发重渲染（避免输入时重建 textarea 丢焦点） */
+  setComment(id: string, comment: string): void {
+    this.state = {
+      ...this.state,
+      annotations: this.state.annotations.map((a) =>
+        a.id === id ? { ...a, comment } : a,
+      ),
+    };
+  }
+
   removeAnnotation(id: string): void {
     this.state = {
       ...this.state,

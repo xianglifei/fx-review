@@ -44,8 +44,8 @@ function findDomPoint(span: Element, charOffset: number): DomPoint | null {
 /** 收集 preview 容器内所有 data-o 元素（按文档顺序）及其源码区间 */
 function collectSpans(preview: HTMLElement): { el: Element; s: number; e: number }[] {
   const out: { el: Element; s: number; e: number }[] = [];
-  // 仅取文本 span，排除 <ins>（零宽插入点，data-o 仅用于选区解析跳过）
-  for (const el of Array.from(preview.querySelectorAll('span[data-o]'))) {
+  // 仅取文本 span，排除 <ins> 和替换新文字节点（.cm-inserted）
+  for (const el of Array.from(preview.querySelectorAll('span[data-o]:not(.cm-inserted)'))) {
     const r = parseDataO(el);
     if (r) out.push({ el, s: r[0], e: r[1] });
   }
@@ -93,6 +93,7 @@ const RANGE_GROUPS: Record<string, string> = {
   deletion: 'cm-del',
   highlight: 'cm-hl',
   comment: 'cm-comment',
+  substitution: 'cm-sub-old',
 };
 
 let supportsHighlight = false;
@@ -104,17 +105,15 @@ try {
 
 /** 重绘全部批注的显示 */
 export function renderOverlay(preview: HTMLElement, annotations: Annotation[]): void {
-  // 清理旧 <ins> / 替换新文字节点，并合并被拆分的文本节点
-  preview
-    .querySelectorAll('ins.cm-ins, span.cm-sub-new')
-    .forEach((n) => n.remove());
+  // 清理旧的插入型显示节点（插入/替换新文字），统一用 .cm-inserted 标记，确保全部移除
+  preview.querySelectorAll('.cm-inserted').forEach((n) => n.remove());
   preview.normalize();
 
   if (supportsHighlight) {
     CSS.highlights.clear();
     const buckets: Record<string, Range[]> = {};
     for (const a of annotations) {
-      if (a.type === 'insertion' || a.type === 'substitution') continue;
+      if (a.type === 'insertion') continue; // 插入无区间
       const name = RANGE_GROUPS[a.type];
       if (!name) continue;
       const r = sourceToRange(preview, a.srcStart, a.srcEnd);
@@ -126,9 +125,9 @@ export function renderOverlay(preview: HTMLElement, annotations: Annotation[]): 
       CSS.highlights.set(name, h);
     }
   } else {
-    // 不支持 Highlight API 的浏览器：降级为 <mark> 包裹（会动 DOM，但保证可用）
+    // 不支持 Highlight API 的浏览器：降级为 <mark> 包裹
     for (const a of annotations) {
-      if (a.type === 'insertion' || a.type === 'substitution') continue;
+      if (a.type === 'insertion') continue;
       const r = sourceToRange(preview, a.srcStart, a.srcEnd);
       if (!r) continue;
       const mark = document.createElement('mark');
@@ -136,25 +135,23 @@ export function renderOverlay(preview: HTMLElement, annotations: Annotation[]): 
       try {
         r.surroundContents(mark);
       } catch {
-        // 跨节点选区 surroundContents 会抛错，降级逐文本节点包裹
         surroundAcross(r, mark);
       }
     }
   }
 
-  // 插入 / 替换的新文字
+  // 插入型显示节点
   for (const a of annotations) {
     if (a.type === 'insertion') {
-      insertInsNode(preview, a.srcStart, a.insertedText ?? '');
+      insertDisplayNode(preview, a.srcStart, 'ins', 'cm-ins cm-inserted', a.insertedText ?? '');
     } else if (a.type === 'substitution') {
-      // 在旧区间末尾插入新文字
-      insertInsNode(preview, a.srcEnd, a.replacement ?? '', 'cm-sub-new');
+      // 旧文字已由 cm-sub-old 高亮（红删除线）；在其后插入" → 新文字"
+      insertDisplayNode(preview, a.srcEnd, 'span', 'cm-sub-new cm-inserted', a.replacement ?? '', true);
     }
   }
 }
 
 function surroundAcross(range: Range, mark: Element): void {
-  // 简化降级：仅包裹首尾文本节点交集（不够精确，仅兜底）
   const nodes: Text[] = [];
   const walker = document.createTreeWalker(
     range.commonAncestorContainer,
@@ -172,24 +169,40 @@ function surroundAcross(range: Range, mark: Element): void {
   }
 }
 
-function insertInsNode(
+/**
+ * 在源码偏移处插入一个显示节点。
+ * withArrow=true 时构造"→ 新文字"结构（替换用），否则直接放纯文本。
+ */
+function insertDisplayNode(
   preview: HTMLElement,
   offset: number,
+  tag: string,
+  cls: string,
   text: string,
-  cls = 'cm-ins',
+  withArrow = false,
 ): void {
-  if (!text) return;
+  if (!text && !withArrow) return;
   const point = sourceToDomPoint(preview, offset);
   if (!point) return;
-  const ins = document.createElement('ins');
-  ins.className = cls;
-  ins.textContent = text;
-  ins.setAttribute('data-o', `${offset},${offset}`); // 标记为零宽点，便于选区解析跳过
-  // 在 point 处分裂文本节点并插入
+  const el = document.createElement(tag);
+  el.className = cls;
+  el.setAttribute('data-o', `${offset},${offset}`); // 零宽点，便于选区解析跳过
+  if (withArrow) {
+    const arrow = document.createElement('span');
+    arrow.className = 'sub-arrow';
+    arrow.textContent = ' → ';
+    const newText = document.createElement('span');
+    newText.className = 'sub-new-text';
+    newText.textContent = text;
+    el.appendChild(arrow);
+    el.appendChild(newText);
+  } else {
+    el.textContent = text;
+  }
   const range = new Range();
   try {
     range.setStart(point.node, point.offset);
-    range.insertNode(ins);
+    range.insertNode(el);
   } catch {
     /* ignore */
   }

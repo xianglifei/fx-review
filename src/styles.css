@@ -15,7 +15,7 @@
   --cm-del: #d1242f;
   --cm-ins: #1a7f37;
   --cm-ins-bg: rgba(26, 127, 55, 0.12);
-  --cm-hl-bg: rgba(59, 130, 246, 0.22);
+  --cm-hl-bg: rgba(255, 235, 59, 0.45);
   --cm-comment-bg: rgba(234, 179, 8, 0.25);
   --cm-comment-line: #b45309;
   --cm-sub-new: #1a7f37;
@@ -44,7 +44,7 @@
   --cm-del: #f85149;
   --cm-ins: #3fb950;
   --cm-ins-bg: rgba(63, 185, 80, 0.16);
-  --cm-hl-bg: rgba(88, 166, 255, 0.25);
+  --cm-hl-bg: rgba(250, 204, 21, 0.32);
   --cm-comment-bg: rgba(212, 175, 55, 0.22);
   --cm-comment-line: #d29922;
   --cm-sub-new: #3fb950;
@@ -439,6 +439,11 @@ body.dragging::after {
 ::highlight(cm-hl) {
   background-color: var(--cm-hl-bg);
 }
+::highlight(cm-sub-old) {
+  color: var(--cm-del);
+  text-decoration: line-through;
+  text-decoration-color: var(--cm-del);
+}
 ::highlight(cm-comment) {
   background-color: var(--cm-comment-bg);
   text-decoration: underline wavy var(--cm-comment-line);
@@ -458,6 +463,11 @@ mark.cm-fallback-deletion {
 mark.cm-fallback-highlight {
   background: var(--cm-hl-bg);
 }
+mark.cm-fallback-substitution {
+  color: var(--cm-del);
+  text-decoration: line-through;
+  background: transparent;
+}
 mark.cm-fallback-comment {
   background: var(--cm-comment-bg);
   text-decoration: underline wavy var(--cm-comment-line);
@@ -471,9 +481,12 @@ ins.cm-ins {
   padding: 0 3px;
   border-radius: 3px;
 }
-span.cm-sub-new {
+.cm-sub-new .sub-arrow {
+  color: var(--text-mute);
+}
+.cm-sub-new .sub-new-text {
   color: var(--cm-ins);
-  background: var(--cm-sub-new-bg);
+  background: var(--cm-ins-bg);
   padding: 0 3px;
   border-radius: 3px;
 }

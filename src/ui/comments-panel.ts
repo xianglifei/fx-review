@@ -75,7 +75,7 @@ function renderEntry(a: Annotation): HTMLElement {
     ta.placeholder = '输入审阅意见…';
     ta.value = a.comment ?? '';
     ta.addEventListener('input', () => {
-      store.updateAnnotation(a.id, { comment: ta.value });
+      store.setComment(a.id, ta.value);
     });
     extra.appendChild(ta);
   }
