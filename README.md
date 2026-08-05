@@ -4,6 +4,8 @@
 
 网页版 Markdown 批注审阅工具。拖入本地 Markdown 文件 → 在渲染后的文字上做 CriticMarkup 批注 → 一键复制或下载带批注的全文，交给 AI 修改。无需下载安装，设备无关，部署在 Cloudflare Pages 上。
 
+![fx-review 在线版本截图](docs/screenshot.png)
+
 ## 灵感与贡献
 
 本项目受 [easychen/markmark](https://github.com/easychen/markmark) 启发——一个 macOS 原生的 Markdown 阅读器，用 [CriticMarkup](https://criticmarkup.com) 语法做文本批注，再把带批注的全文交给 AI 修改。

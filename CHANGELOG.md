@@ -2,6 +2,11 @@
 
 本文件记录 fx-review 所有对外变更。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [0.1.3] - 2026-08-05
+
+### Added
+- README 在"灵感与贡献"前增加在线版本截图（`docs/screenshot.png`）。
+
 ## [0.1.2] - 2026-08-05
 
 ### Changed
