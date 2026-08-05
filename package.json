@@ -1,0 +1,20 @@
+{
+  "name": "fx-review",
+  "version": "0.1.0",
+  "description": "网页版 Markdown 批注审阅工具，基于 CriticMarkup，部署于 Cloudflare Pages",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "deploy": "npm run build && wrangler pages deploy dist"
+  },
+  "dependencies": {
+    "markdown-it": "^14.1.0"
+  },
+  "devDependencies": {
+    "@types/markdown-it": "^14.1.2",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.10"
+  }
+}
