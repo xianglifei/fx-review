@@ -299,10 +299,10 @@ export class Reviewer {
     flashAnnotation(this.preview, a, this.ns);
   }
 
-  /** 通知评论栏按当前状态重绘（setComment 静默更新后手动触发持久化与计数） */
+  /** 评论备注等静默更新后手动触发：只做持久化与角标，绝不重建列表——
+   *  重建会换掉正在输入的 textarea，焦点与输入法组合每键即断（0.2.0 回归） */
   onSilentMutation(): void {
     this.persistence?.saveSoon();
-    this.commentsApi.refresh();
     this.setBadgeCount(this.store.state.annotations.length);
   }
 

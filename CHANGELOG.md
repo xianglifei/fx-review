@@ -4,6 +4,13 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **dsh 插件评论条目占高异常（大片空白）**：dsh 文档预览容器自带 `white-space: pre-wrap`（为纯文本预览设计），插件组件继承后 innerHTML 模板里的缩进换行被渲染成大段空白，每条批注被撑高数倍。修复：`.fxr-root` 显式恢复 `white-space: normal`（需要 pre-wrap 的引用块等自行声明）。
+- **评论框无法用输入法输入（每键丢焦点）**：评论备注输入触发的静默更新误走了整列表重绘，正在输入的 textarea 被销毁重建，焦点与输入法组合每键即断。修复：静默更新只做持久化与角标；结构性重绘时保留正在输入的条目节点并显式恢复焦点。
+
+## [Unreleased]
+
 ### Added
 
 - **dsh 插件 dsh-fx-review（`dsh-plugin/`）**：把 fx-review 嵌进 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（dsh）Web 界面的右侧栏 Markdown 预览——模型产出的 `.md` 文件直接在预览里选中文字做 CriticMarkup 批注，一键复制（可带引导 Prompt）交回模型修改，形成「产出 → 审阅 → 修改」闭环。extension 优先级接管 `.md`/`.markdown`/`.mdown` 渲染（dsh 预览头部下拉可随时切回内置 Markdown）；文件一次性整读（批注偏移不因分页漂移）；批注按「文件名 + 内容哈希」存 localStorage（前缀 `fx-review:embed:`，与网页版互不干扰）；主题跟随 dsh 明暗；不携带 Shiki（代码块纯文本，控制体积）。安装 `dsh plugin add dsh-fx-review`（或本地 `link:`），构建 `npm run build:plugin`。

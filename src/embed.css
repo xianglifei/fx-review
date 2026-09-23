@@ -42,6 +42,9 @@
     'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
   font-size: 14px;
   line-height: 1.5;
+  /* 宿主（dsh 文档预览 body）是 pre-wrap：会把我们 innerHTML 模板的缩进换行
+     渲染成大段空白，显式恢复 normal（quote/note 等需要 pre-wrap 的自行声明） */
+  white-space: normal;
   container-type: inline-size;
   container-name: fxr;
 }

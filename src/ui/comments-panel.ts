@@ -86,6 +86,7 @@ export function createCommentsPanel(ed: EditorContext): CommentsApi {
   function renderEntry(a: Annotation): HTMLElement {
     const entry = document.createElement('div');
     entry.className = `fxr-comment-entry fxr-comment-entry-${a.type}`;
+    entry.dataset.id = a.id;
 
     const typeLabel = labelFor(a);
     const quote = a.quotedText || (a.type === 'insertion' ? a.insertedText : '') || '';
@@ -156,7 +157,14 @@ export function createCommentsPanel(ed: EditorContext): CommentsApi {
     count.textContent = String(annotations.length);
     undoBtn.disabled = !ed.store.canUndo;
     redoBtn.disabled = !ed.store.canRedo;
-    list.innerHTML = '';
+
+    // 焦点保持：正在输入的条目（评论框 textarea 等）不重建——appendChild 移动
+    // 保留节点，输入法组合与光标不丢；其余条目照常重绘
+    const active = document.activeElement;
+    const activeEntry = active instanceof Element
+      ? active.closest<HTMLElement>('.fxr-comment-entry')
+      : null;
+    const keepId = activeEntry?.dataset.id ?? null;
 
     if (annotations.length === 0) {
       list.innerHTML = `<div class="fxr-comments-empty">尚无批注。选中正文文字后点击批注按钮，或在选区旁的浮动菜单操作。</div>`;
@@ -165,8 +173,17 @@ export function createCommentsPanel(ed: EditorContext): CommentsApi {
 
     // 按源码顺序排列
     const sorted = [...annotations].sort((a, b) => a.srcStart - b.srcStart);
+    const keepable = keepId !== null && sorted.some((a) => a.id === keepId);
+    for (const child of [...list.children]) {
+      if (!(keepable && child === activeEntry)) child.remove();
+    }
     for (const a of sorted) {
-      list.appendChild(renderEntry(a));
+      if (keepable && a.id === keepId && activeEntry !== null) list.appendChild(activeEntry);
+      else list.appendChild(renderEntry(a));
+    }
+    // appendChild 移动节点会掉焦点（Chromium）：显式恢复
+    if (keepable && active instanceof HTMLElement && active.isConnected) {
+      active.focus({ preventScroll: true });
     }
   }
 
