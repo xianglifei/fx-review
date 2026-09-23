@@ -649,7 +649,7 @@ var lo=Object.defineProperty;var fo=(U,T,Q)=>T in U?lo(U,T,{enumerable:!0,config
 .fxr-dock {
   padding-top: 4px;
 }
-.fxr-dock-chip {
+.fxr-dock .fxr-dock-chip {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -663,7 +663,7 @@ var lo=Object.defineProperty;var fo=(U,T,Q)=>T in U?lo(U,T,{enumerable:!0,config
   cursor: pointer;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
-.fxr-dock-chip:hover {
+.fxr-dock .fxr-dock-chip:hover {
   background: var(--fxr-bg-soft, #f0f1f3);
 }
 .fxr-dock-chevron {
@@ -697,7 +697,7 @@ var lo=Object.defineProperty;var fo=(U,T,Q)=>T in U?lo(U,T,{enumerable:!0,config
   color: var(--fxr-text-mute, #8b949e);
   margin: 8px 0 6px;
 }
-.fxr-dock-remove {
+.fxr-dock .fxr-dock-remove {
   border: none;
   background: transparent;
   color: var(--fxr-text-soft, #57606a);
@@ -707,7 +707,7 @@ var lo=Object.defineProperty;var fo=(U,T,Q)=>T in U?lo(U,T,{enumerable:!0,config
   padding: 2px 6px;
   border-radius: 4px;
 }
-.fxr-dock-remove:hover {
+.fxr-dock .fxr-dock-remove:hover {
   background: var(--fxr-bg-soft, #f0f1f3);
   color: var(--fxr-text, #1f2328);
 }
@@ -742,10 +742,15 @@ body[data-ds-dark-theme] .fxr-dock-remove:hover {
   color: #e6edf3;
 }
 
-/* ===== 输入浮层（挂 body，视口定位） ===== */
+/* ===== 输入浮层（挂 body，视口定位） =====
+ * body 层组件两条硬规则：①box-sizing 必须 border-box（网页版的 * 重置到不了
+ * 这里，content-box 会让 width:100% 的文本框溢出容器）；②按钮样式要带容器
+ * 前缀提到两类特异性——dsh 暗色主题的按钮重置是 [data-ds-dark-theme]…button
+ * （1类+1元素），单类选择器会被它压掉（确认按钮白字透明底的隐形事故）。 */
 .fxr-input-popover {
   position: absolute;
   z-index: 90;
+  box-sizing: border-box;
   width: 320px;
   background: var(--fxr-bg-elev, #fff);
   border: 1px solid var(--fxr-border, #e4e6ea);
@@ -764,6 +769,7 @@ body[data-ds-dark-theme] .fxr-dock-remove:hover {
   font-weight: 600;
 }
 .fxr-input-popover-area {
+  box-sizing: border-box;
   width: 100%;
   min-height: 60px;
   resize: vertical;
@@ -785,9 +791,69 @@ body[data-ds-dark-theme] .fxr-dock-remove:hover {
   justify-content: flex-end;
   gap: 8px;
 }
-.fxr-input-popover-actions .fxr-btn {
+.fxr-input-popover .fxr-btn {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid var(--fxr-border, #e4e6ea);
+  background: var(--fxr-bg-elev, #fff);
+  color: var(--fxr-text, #1f2328);
   padding: 4px 12px;
+  border-radius: 8px;
   font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.fxr-input-popover .fxr-btn:hover {
+  background: var(--fxr-bg-soft, #f0f1f3);
+}
+.fxr-input-popover .fxr-btn-primary {
+  background: var(--fxr-accent, #2563eb);
+  border-color: var(--fxr-accent, #2563eb);
+  color: #fff;
+}
+.fxr-input-popover .fxr-btn-primary:hover {
+  filter: brightness(1.08);
+  background: var(--fxr-accent, #2563eb);
+}
+.fxr-input-popover .fxr-btn-ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--fxr-text-soft, #57606a);
+}
+.fxr-input-popover .fxr-btn-ghost:hover {
+  background: var(--fxr-bg-soft, #f0f1f3);
+}
+/* dsh 暗色主题 */
+[data-ds-dark-theme] .fxr-input-popover {
+  border-color: #30363d;
+  background: #161b22;
+  color: #e6edf3;
+}
+[data-ds-dark-theme] .fxr-input-popover-area {
+  background: #0d1117;
+  border-color: #30363d;
+  color: #e6edf3;
+}
+[data-ds-dark-theme] .fxr-input-popover .fxr-btn {
+  border-color: #30363d;
+  background: #161b22;
+  color: #e6edf3;
+}
+[data-ds-dark-theme] .fxr-input-popover .fxr-btn:hover {
+  background: #21262d;
+}
+[data-ds-dark-theme] .fxr-input-popover .fxr-btn-primary {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: #fff;
+}
+[data-ds-dark-theme] .fxr-input-popover .fxr-btn-ghost {
+  background: transparent;
+  border-color: transparent;
+  color: #9198a1;
 }
 
 /* ===== Toast ===== */

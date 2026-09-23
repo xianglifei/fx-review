@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **替换/插入输入浮层在 dsh 暗色主题下确认按钮隐形、文本框溢出**：浮层挂在页面 body 层，dsh 暗色主题的按钮重置（`[data-ds-dark-theme] … button`，1类+1元素）压过单类选择器，确认按钮变成白字透明底；且 body 层组件吃不到 `box-sizing: border-box` 重置，`width: 100%` 的文本框连边带距溢出容器。修复：浮层内按钮样式改为容器前缀（两类特异性）并显式 border-box；浮层与按钮补齐 dsh 暗色配色；dock chip 按钮同样加固。
+
+## [Unreleased]
+
 ### Added
 
 - **表格内容可批注（网页版与 dsh 插件同时受益）**：此前偏移映射只覆盖带行号 map 的块级 token，而 markdown-it 的表格单元格 inline token 不带 map——表格里的文字从未真正可批注（选区端点落不进任何 data-o span，五种操作全部报「请先选中要批注的文字」）。现在 source-map 感知表格行（`tr_open` 的行号 map + 行源码按未转义竖线切格），对每个单元格做与段落同一套的 inline 对齐；支持单元格内加粗/行内代码/转义竖线 `\|`。代码块（fence）仍不参与批注（内容非 inline token，维持既有说明）。
