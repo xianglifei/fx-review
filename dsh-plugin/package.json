@@ -1,6 +1,6 @@
 {
   "name": "dsh-fx-review",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "在 dsh 右侧栏的 Markdown 预览里直接做 CriticMarkup 批注审阅，一键复制交给 AI（fx-review 嵌入版）",
   "keywords": [
     "dsh",
@@ -29,7 +29,9 @@
       "platform": "web",
       "inject": [
         "@deepseek-ai/dsh-client-locale",
-        "@deepseek-ai/dsh-client-ui-sidebar-documentpreview"
+        "@deepseek-ai/dsh-client-ui-sidebar-documentpreview",
+        "@deepseek-ai/dsh-client-ui-session",
+        "@deepseek-ai/dsh-client-ui-conversation"
       ]
     }
   }

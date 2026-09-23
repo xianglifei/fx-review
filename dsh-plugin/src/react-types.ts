@@ -5,6 +5,12 @@
 export interface ReactLike {
   useRef: <T>(initial: T) => { current: T };
   useEffect: (effect: () => void | (() => void), deps?: readonly unknown[]) => void;
+  useMemo: <T>(factory: () => T, deps: readonly unknown[]) => T;
+  useState: <T>(initial: T | (() => T)) => [T, (value: T | ((prev: T) => T)) => void];
+  useSyncExternalStore?: <T>(
+    subscribe: (onStoreChange: () => void) => () => void,
+    getSnapshot: () => T,
+  ) => T;
   createElement: (
     type: string,
     props: Record<string, unknown> | null,

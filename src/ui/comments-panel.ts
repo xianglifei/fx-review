@@ -28,7 +28,7 @@ function labelFor(a: Annotation): string {
   }
 }
 
-/** 评论与批注栏（每实例一个） */
+/** 评论与批注栏（每实例一个）：头部图标组（撤销/重做/清空）+ 提交按钮 + 宽度拖拽 */
 export function createCommentsPanel(ed: EditorContext): CommentsApi {
   const panel = document.createElement('aside');
   panel.className = 'fxr-comments-panel';
@@ -38,12 +38,16 @@ export function createCommentsPanel(ed: EditorContext): CommentsApi {
 
   panel.innerHTML = `
     <div class="fxr-comments-head">
-      <span>评论与批注</span>
+      <span class="fxr-comments-title">评论与批注</span>
       <span class="fxr-comments-tools">
-        <button class="fxr-comments-tool" data-act="undo" title="撤销（⌘/Ctrl+Z）">↩ 撤销</button>
-        <button class="fxr-comments-tool" data-act="redo" title="重做（⌘/Ctrl+Shift+Z）">↪ 重做</button>
-        <button class="fxr-comments-tool fxr-comments-close" data-act="close" title="收起批注栏">✕</button>
+        <button class="fxr-comments-tool" data-act="undo" title="撤销（⌘/Ctrl+Z）">↩</button>
+        <button class="fxr-comments-tool" data-act="redo" title="重做（⌘/Ctrl+Shift+Z）">↪</button>
+        <button class="fxr-comments-tool" data-act="clear" title="清除全部批注">🗑</button>
         <span class="fxr-comments-count">0</span>
+      </span>
+      <span class="fxr-comments-tools fxr-comments-tail">
+        ${ed.canSubmit() ? '<button class="fxr-submit-btn" data-act="submit" title="把批注全文放到会话输入框上方，发送时附带">提交</button>' : ''}
+        <button class="fxr-comments-tool fxr-comments-close" data-act="close" title="收起批注栏">✕</button>
       </span>
     </div>
     <div class="fxr-comments-list"></div>`;
@@ -52,6 +56,7 @@ export function createCommentsPanel(ed: EditorContext): CommentsApi {
   const count = panel.querySelector('.fxr-comments-count') as HTMLElement;
   const undoBtn = panel.querySelector('[data-act="undo"]') as HTMLButtonElement;
   const redoBtn = panel.querySelector('[data-act="redo"]') as HTMLButtonElement;
+  const clearBtn = panel.querySelector('[data-act="clear"]') as HTMLButtonElement;
 
   const close = (): void => {
     backdrop.classList.remove('show');
@@ -62,10 +67,21 @@ export function createCommentsPanel(ed: EditorContext): CommentsApi {
     panel.classList.add('open');
   };
 
-  undoBtn.addEventListener('click', () => ed.undo());
-  redoBtn.addEventListener('click', () => ed.redo());
+  undoBtn.addEventListener('click', () => {
+    if (!ed.undo()) ed.notify('没有可撤销的操作');
+  });
+  redoBtn.addEventListener('click', () => {
+    if (!ed.redo()) ed.notify('没有可重做的操作');
+  });
+  clearBtn.addEventListener('click', () => {
+    if (ed.store.state.annotations.length === 0) return;
+    if (window.confirm('确定清除全部批注？')) ed.clearAnnotations();
+  });
+  panel.querySelector('[data-act="submit"]')?.addEventListener('click', () => ed.submit());
   panel.querySelector('[data-act="close"]')!.addEventListener('click', close);
   backdrop.addEventListener('click', close);
+
+  installResizer(ed, panel);
 
   function renderEntry(a: Annotation): HTMLElement {
     const entry = document.createElement('div');
@@ -165,4 +181,53 @@ export function createCommentsPanel(ed: EditorContext): CommentsApi {
       else open();
     },
   };
+}
+
+/** 宽容器下拖拽面板左缘调宽（窄容器抽屉模式经 CSS 隐藏手柄）。宽度偏好持久化。 */
+function installResizer(ed: EditorContext, panel: HTMLElement): void {
+  const handle = document.createElement('div');
+  handle.className = 'fxr-resizer';
+  handle.title = '拖动调整批注栏宽度';
+  panel.appendChild(handle);
+
+  let dragging = false;
+  const MIN = 240;
+  const MAX = 640;
+
+  const apply = (width: number): void => {
+    ed.root.style.setProperty('--fxr-panel-w', `${Math.round(width)}px`);
+  };
+
+  const onPointerDown = (e: PointerEvent): void => {
+    if (e.button !== 0) return;
+    dragging = true;
+    handle.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  };
+  const onPointerMove = (e: PointerEvent): void => {
+    if (!dragging) return;
+    const ws = panel.parentElement;
+    if (!ws) return;
+    const wsRect = ws.getBoundingClientRect();
+    const width = Math.min(MAX, Math.max(MIN, wsRect.right - e.clientX - 1));
+    apply(width);
+  };
+  const onPointerUp = (): void => {
+    if (!dragging) return;
+    dragging = false;
+    try {
+      const value = ed.root.style.getPropertyValue('--fxr-panel-w');
+      if (value) window.localStorage.setItem('fx-review:panelWidth', value);
+    } catch { /* ignore */ }
+  };
+
+  handle.addEventListener('pointerdown', onPointerDown);
+  handle.addEventListener('pointermove', onPointerMove);
+  handle.addEventListener('pointerup', onPointerUp);
+  handle.addEventListener('pointercancel', onPointerUp);
+  // 双击手柄恢复默认宽
+  handle.addEventListener('dblclick', () => {
+    ed.root.style.removeProperty('--fxr-panel-w');
+    try { window.localStorage.removeItem('fx-review:panelWidth'); } catch { /* ignore */ }
+  });
 }

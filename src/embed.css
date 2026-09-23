@@ -220,13 +220,73 @@
 
 /* ===== 评论栏 ===== */
 .fxr-comments-panel {
-  width: 320px;
+  width: var(--fxr-panel-w, 320px);
   flex-shrink: 0;
   border-left: 1px solid var(--fxr-border);
   background: var(--fxr-bg-elev);
   display: flex;
   flex-direction: column;
   min-height: 0;
+}
+/* 宽度拖拽手柄（宽容器侧栏模式；窄容器抽屉模式隐藏） */
+.fxr-resizer {
+  position: absolute;
+  left: -4px;
+  top: 0;
+  bottom: 0;
+  width: 9px;
+  cursor: col-resize;
+  z-index: 5;
+  touch-action: none;
+}
+.fxr-resizer::after {
+  content: '';
+  position: absolute;
+  left: 3px;
+  top: 50%;
+  height: 28px;
+  margin-top: -14px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--fxr-border);
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.fxr-resizer:hover::after,
+.fxr-resizer:active::after {
+  opacity: 1;
+  background: var(--fxr-text-mute);
+}
+.fxr-comments-panel {
+  position: relative;
+}
+/* 窄容器浮动按钮（compact 无工具栏后的评论抽屉入口） */
+.fxr-panel-fab {
+  display: none;
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  z-index: 30;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid var(--fxr-border);
+  background: var(--fxr-bg-elev);
+  color: var(--fxr-text-soft);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  box-shadow: var(--fxr-shadow);
+}
+.fxr-panel-fab:hover {
+  background: var(--fxr-bg-soft);
+}
+.fxr-panel-fab-count {
+  background: var(--fxr-bg-soft);
+  border-radius: 999px;
+  padding: 0 6px;
+  font-size: 11px;
 }
 /* 抽屉相关默认隐藏（宽容器并排展示；窄容器经容器查询切换） */
 .fxr-panel-toggle {
@@ -241,16 +301,42 @@
 .fxr-comments-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 12px 16px;
+  gap: 6px;
+  padding: 10px 12px;
   border-bottom: 1px solid var(--fxr-border);
   font-weight: 600;
   font-size: 13px;
+}
+.fxr-comments-title {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .fxr-comments-tools {
   display: flex;
   align-items: center;
   gap: 2px;
+  flex-shrink: 0;
+}
+.fxr-comments-tail {
+  margin-left: auto;
+}
+.fxr-submit-btn {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--fxr-accent);
+  background: var(--fxr-accent);
+  color: #fff;
+  border-radius: 6px;
+  padding: 3px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.fxr-submit-btn:hover {
+  filter: brightness(1.08);
 }
 .fxr-comments-tool {
   background: transparent;
@@ -556,6 +642,103 @@
   gap: 8px;
 }
 
+/* ===== 提交 chip（挂 conversation dock，宿主页面层、不在 .fxr-root 内） ===== */
+.fxr-dock {
+  padding-top: 4px;
+}
+.fxr-dock-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--fxr-border, #e4e6ea);
+  background: var(--fxr-bg-elev, #fff);
+  color: var(--fxr-text, #1f2328);
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-size: 12.5px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif;
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+.fxr-dock-chip:hover {
+  background: var(--fxr-bg-soft, #f0f1f3);
+}
+.fxr-dock-chevron {
+  color: var(--fxr-text-mute, #8b949e);
+  font-size: 10px;
+}
+.fxr-dock-box {
+  margin-top: 6px;
+  border: 1px solid var(--fxr-border, #e4e6ea);
+  border-radius: 10px;
+  background: var(--fxr-bg-elev, #fff);
+  padding: 10px;
+  max-width: 560px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif;
+}
+.fxr-dock-preview {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--fxr-text, #1f2328);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 160px;
+  overflow: auto;
+  background: var(--fxr-bg-soft, #f0f1f3);
+  border-radius: 6px;
+  padding: 8px;
+}
+.fxr-dock-hint {
+  font-size: 12px;
+  color: var(--fxr-text-mute, #8b949e);
+  margin: 8px 0 6px;
+}
+.fxr-dock-remove {
+  border: none;
+  background: transparent;
+  color: var(--fxr-text-soft, #57606a);
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+.fxr-dock-remove:hover {
+  background: var(--fxr-bg-soft, #f0f1f3);
+  color: var(--fxr-text, #1f2328);
+}
+/* dsh 暗色主题（body[data-ds-dark-theme]）：chip 在宿主页面层，吃不到 .fxr-root 变量 */
+body[data-ds-dark-theme] .fxr-dock-chip {
+  border-color: #30363d;
+  background: #161b22;
+  color: #e6edf3;
+}
+body[data-ds-dark-theme] .fxr-dock-chip:hover {
+  background: #21262d;
+}
+body[data-ds-dark-theme] .fxr-dock-chevron {
+  color: #6e7681;
+}
+body[data-ds-dark-theme] .fxr-dock-box {
+  border-color: #30363d;
+  background: #161b22;
+}
+body[data-ds-dark-theme] .fxr-dock-preview {
+  background: #21262d;
+  color: #e6edf3;
+}
+body[data-ds-dark-theme] .fxr-dock-hint {
+  color: #6e7681;
+}
+body[data-ds-dark-theme] .fxr-dock-remove {
+  color: #9198a1;
+}
+body[data-ds-dark-theme] .fxr-dock-remove:hover {
+  background: #21262d;
+  color: #e6edf3;
+}
+
 /* ===== 输入浮层（挂 body，视口定位） ===== */
 .fxr-input-popover {
   position: absolute;
@@ -768,6 +951,12 @@
 @container fxr (max-width: 700px) {
   .fxr-btn-anno .fxr-btn-label {
     display: none;
+  }
+  .fxr-resizer {
+    display: none;
+  }
+  .fxr-panel-fab {
+    display: inline-flex;
   }
   .fxr-panel-toggle {
     display: inline-flex;

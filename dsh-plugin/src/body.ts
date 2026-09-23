@@ -1,4 +1,5 @@
 import type { ReactLike } from './react-types';
+import type { SubmitFeature } from './submit';
 
 export type MountReviewer = (opts: {
   container: HTMLElement;
@@ -7,6 +8,7 @@ export type MountReviewer = (opts: {
   storagePrefix: string;
   maxSavedDocs?: number;
   bindScrollport?: (node: HTMLElement | null) => void;
+  onSubmit?: (payload: import('../../src/editor').SubmitPayload) => boolean;
 }) => {
   setDocument(fileName: string, source: string): number;
   notify(message: string, duration?: number): void;
@@ -45,15 +47,18 @@ function decodeContent(content: ContentProp | undefined): string | null {
   return null;
 }
 
-/** dsh-resource://file/session/<id>/<encoded path> → 文件名（持久化键的一部分） */
-function fileNameOf(address: string | undefined): string {
-  if (!address) return 'document.md';
+/** dsh-resource://file/session/<id>/<encoded path> → 各段解码（[sessionId, 文件名]） */
+function parseAddress(address: string | undefined): { sessionId: string | null; fileName: string } {
+  if (!address) return { sessionId: null, fileName: 'document.md' };
   try {
     const path = address.split(/[?#]/)[0].replace(/^dsh-resource:\/\/file\//, '');
-    const last = path.split('/').filter(Boolean).pop();
-    return (last && decodeURIComponent(last)) || 'document.md';
+    const segs = path.split('/').filter(Boolean).map((s) => decodeURIComponent(s));
+    if (segs[0] === 'session' && segs.length >= 3) {
+      return { sessionId: segs[1], fileName: segs[segs.length - 1] || 'document.md' };
+    }
+    return { sessionId: null, fileName: segs[segs.length - 1] || 'document.md' };
   } catch {
-    return 'document.md';
+    return { sessionId: null, fileName: 'document.md' };
   }
 }
 
@@ -62,10 +67,15 @@ function fileNameOf(address: string | undefined): string {
  * sidebar.right.tab.document keyed slot 的组件。渲染层只有这一个 div，
  * 编辑器本体是 vanilla DOM，在 effect 里挂载/销毁。
  */
-export function makeBody(react: ReactLike, mountReviewer: MountReviewer) {
+export function makeBody(react: ReactLike, mountReviewer: MountReviewer, submit: SubmitFeature | null) {
   return function FxReviewBody(props: BodyProps): unknown {
     const hostRef = react.useRef<HTMLElement | null>(null);
     const reviewerRef = react.useRef<ReturnType<MountReviewer> | null>(null);
+    /** 本 tab 的会话 id（session 作用域的地址在 tab 生命周期内不变；地址变化时更新） */
+    const sessionRef = react.useRef<{ sessionId: string | null; fileName: string }>({
+      sessionId: null,
+      fileName: 'document.md',
+    });
 
     react.useEffect(() => {
       const host = hostRef.current;
@@ -77,6 +87,15 @@ export function makeBody(react: ReactLike, mountReviewer: MountReviewer) {
         storagePrefix: EMBED_STORAGE_PREFIX,
         maxSavedDocs: 50,
         bindScrollport: (node) => props.scrollportRef?.(node),
+        onSubmit: submit === null
+          ? undefined
+          : (payload) => {
+              const { sessionId } = sessionRef.current;
+              if (sessionId === null) return false;
+              const ok = submit.commit(sessionId, payload);
+              if (ok) reviewer.notify('批注已放到输入框上方，发送时附带');
+              return ok;
+            },
       });
       reviewerRef.current = reviewer;
       return () => {
@@ -91,7 +110,8 @@ export function makeBody(react: ReactLike, mountReviewer: MountReviewer) {
         if (props.content) reviewerRef.current?.notify('文件内容不是 UTF-8 文本，无法批注');
         return;
       }
-      reviewerRef.current?.setDocument(fileNameOf(props.resourceAddress), text);
+      sessionRef.current = parseAddress(props.resourceAddress);
+      reviewerRef.current?.setDocument(sessionRef.current.fileName, text);
     }, [props.content, props.resourceAddress]);
 
     return react.createElement('div', { ref: hostRef, className: 'fxr-host' });

@@ -4,7 +4,7 @@ import { createMarkdown } from './render/markdown';
 import { renderMarkdown } from './render/source-map';
 import { initCodeHighlight, type LoadHighlighter } from './render/highlight';
 import { renderOverlay, flashAnnotation, highlightApiSupported } from './annotator/overlay';
-import { createAnnotation, readContext } from './annotator/create';
+import { createAnnotation, readContext, type CreateContext } from './annotator/create';
 import { copyAnnotated as copyAnnotatedAction, copyWithPrompt as copyWithPromptAction, downloadAnnotated, downloadWithPrompt } from './export/actions';
 import { buildAnnotatedSource } from './export/criticmarkup';
 import { DEFAULT_PROMPT } from './export/prompt';
@@ -21,10 +21,24 @@ const neverLoad: LoadHighlighter = () => new Promise(() => {});
 /** 多实例时 highlight 注册名的序号来源 */
 let instanceSeq = 0;
 
+/** 提交载荷：交给宿主（dsh 插件把批注文档送进会话输入框） */
+export interface SubmitPayload {
+  fileName: string;
+  /** 批注条数 */
+  count: number;
+  /** 引导 Prompt（发送时应前置） */
+  prompt: string;
+  /** 带 CriticMarkup 标记的全文 */
+  annotatedSource: string;
+}
+
+/** 评论栏宽度持久化键（网页版与嵌入版共用一份偏好） */
+const PANEL_WIDTH_KEY = 'fx-review:panelWidth';
+
 export interface ReviewerOptions {
   /** 挂载点：编辑器在里面创建 .fxr-root（flex 纵向铺满） */
   container: HTMLElement;
-  /** full = 网页壳（品牌区/下载/主题切换）；compact = 嵌入（dsh 侧栏 tab） */
+  /** full = 网页壳（品牌区/下载/主题切换）；compact = 嵌入（dsh 侧栏 tab，无工具栏） */
   variant?: 'full' | 'compact';
   /** auto = 跟随系统 + 工具栏切换按钮；host = 跟随宿主页面（dsh 的 body[data-ds-dark-theme]） */
   theme?: 'auto' | 'host';
@@ -45,6 +59,9 @@ export interface ReviewerOptions {
   ns?: string;
   /** 滚动容器绑定回调（宿主用来记录滚动位置） */
   bindScrollport?: (node: HTMLElement | null) => void;
+  /** 提交回调：给定时评论栏显示「提交」按钮（嵌入场景把批注送进会话输入框）。
+   *  返回 false 表示宿主未能接住（编辑器回落为复制到剪贴板并提示）。 */
+  onSubmit?: (payload: SubmitPayload) => boolean;
 }
 
 /**
@@ -64,29 +81,32 @@ export class Reviewer {
   private readonly md = createMarkdown();
   private readonly persistence: DocPersistence | null;
   private readonly toaster: ReturnType<typeof createToaster>;
-  private readonly toolbarApi: ToolbarApi;
+  private readonly toolbarApi: ToolbarApi | null;
   private readonly commentsApi: CommentsApi;
   private menuApi!: ReturnType<typeof createSelectionMenu>;
   private readonly emptyState: HTMLElement;
   private readonly disposers: Array<() => void> = [];
+  private readonly onSubmit: ((payload: SubmitPayload) => boolean) | undefined;
+  /** 窄容器下展开评论抽屉的浮动按钮（compact 无工具栏后的面板入口） */
+  private readonly panelFab: HTMLButtonElement | null;
+  private readonly fabCount: HTMLElement | null;
 
   private themeMode: 'auto' | 'host';
   private theme: 'light' | 'dark' = 'light';
   private lastRenderedSource = '';
   private notifiedNoHighlight = false;
+  /** 菜单弹出时快照的选区上下文：宿主（输入框焦点管理等）在点击前偷走 DOM 选区时的兜底 */
+  private capturedCtx: CreateContext | null = null;
 
   constructor(opts: ReviewerOptions) {
     this.container = opts.container;
     this.variant = opts.variant ?? 'full';
     this.themeMode = opts.theme ?? (this.variant === 'compact' ? 'host' : 'auto');
     this.ns = opts.ns ?? (this.variant === 'compact' ? `fxr${++instanceSeq}` : '');
+    this.onSubmit = opts.onSubmit;
 
-    this.toaster = createToaster(() => this.root.isConnected ? this.root : this.container);
+    this.toaster = createToaster(() => (this.root.isConnected ? this.root : this.container));
     this.notify = (message, duration) => this.toaster(message, duration);
-
-    // ---- DOM 骨架 ----
-    this.root = document.createElement('div');
-    this.root.className = `fxr-root${this.variant === 'compact' ? ' fxr-compact' : ''}`;
 
     if (opts.storagePrefix !== null) {
       this.persistence = new DocPersistence(this.store, {
@@ -98,9 +118,13 @@ export class Reviewer {
       this.persistence = null;
     }
 
-    // ---- DOM 骨架 ----
+    // ---- DOM 骨架（compact 不建工具栏：对齐 dsh 内置预览的观感） ----
     this.root = document.createElement('div');
     this.root.className = `fxr-root${this.variant === 'compact' ? ' fxr-compact' : ''}`;
+    try {
+      const saved = window.localStorage.getItem(PANEL_WIDTH_KEY);
+      if (saved && /^\d{2,4}px$/.test(saved)) this.root.style.setProperty('--fxr-panel-w', saved);
+    } catch { /* ignore */ }
 
     const workspace = document.createElement('div');
     workspace.className = 'fxr-workspace';
@@ -113,9 +137,25 @@ export class Reviewer {
     this.emptyState = opts.emptyState ?? defaultEmptyState();
     this.previewWrap.append(this.preview, this.emptyState);
 
+    // 窄容器浮动按钮（CSS 只在容器查询窄档显示）：入口给评论抽屉
+    if (this.variant === 'compact') {
+      this.panelFab = document.createElement('button');
+      this.panelFab.type = 'button';
+      this.panelFab.className = 'fxr-panel-fab';
+      this.panelFab.title = '评论与批注';
+      this.panelFab.innerHTML = '📋 <span class="fxr-panel-fab-count">0</span>';
+      this.panelFab.addEventListener('click', () => this.togglePanel());
+      this.previewWrap.appendChild(this.panelFab);
+      this.fabCount = this.panelFab.querySelector('.fxr-panel-fab-count');
+    } else {
+      this.panelFab = null;
+      this.fabCount = null;
+    }
+
     this.commentsApi = createCommentsPanel(this);
-    this.toolbarApi = createToolbar(this);
-    this.root.append(this.toolbarApi.el, workspace);
+    this.toolbarApi = this.variant === 'full' ? createToolbar(this) : null;
+    if (this.toolbarApi) this.root.append(this.toolbarApi.el);
+    this.root.append(workspace);
     workspace.append(this.previewWrap, this.commentsApi.el, this.commentsApi.backdrop);
     this.container.appendChild(this.root);
     opts.bindScrollport?.(this.previewWrap);
@@ -195,10 +235,27 @@ export class Reviewer {
     return this.store.state.annotations.length;
   }
 
+  canSubmit(): boolean {
+    return this.onSubmit !== undefined;
+  }
+
+  /** 提交批注文档给宿主；宿主未接住时回落为复制到剪贴板 */
+  submit(): void {
+    if (!this.requireDocument()) return;
+    const payload: SubmitPayload = {
+      fileName: this.store.state.fileName,
+      count: this.store.state.annotations.length,
+      prompt: this.store.state.prompt,
+      annotatedSource: buildAnnotatedSource(this.store.state.source, this.store.state.annotations),
+    };
+    if (this.onSubmit?.(payload) === true) return;
+    void this.copy(true);
+  }
+
   setTheme(theme: 'light' | 'dark'): void {
     this.theme = theme;
     this.root.dataset.theme = theme;
-    this.toolbarApi.setThemeIcon(theme);
+    this.toolbarApi?.setThemeIcon(theme);
   }
 
   getTheme(): 'light' | 'dark' {
@@ -218,7 +275,12 @@ export class Reviewer {
       this.notify('请先打开 Markdown 文档');
       return;
     }
-    void createAnnotation(type, readContext(), { store: this.store, notify: this.notify });
+    // 实时选区优先；菜单可见期间 DOM 选区被宿主偷走时，回落到菜单弹出时的快照
+    const live = readContext();
+    const ctx = live.selection !== null || live.caret !== null
+      ? live
+      : this.capturedCtx ?? live;
+    void createAnnotation(type, ctx, { store: this.store, notify: this.notify });
   }
 
   async copy(withPrompt: boolean): Promise<void> {
@@ -241,7 +303,7 @@ export class Reviewer {
   onSilentMutation(): void {
     this.persistence?.saveSoon();
     this.commentsApi.refresh();
-    this.toolbarApi.setCount(this.store.state.annotations.length);
+    this.setBadgeCount(this.store.state.annotations.length);
   }
 
   destroy(): void {
@@ -262,6 +324,11 @@ export class Reviewer {
     if (this.store.state.source) return true;
     this.notify('请先打开 Markdown 文档');
     return false;
+  }
+
+  private setBadgeCount(n: number): void {
+    this.toolbarApi?.setCount(n);
+    if (this.fabCount) this.fabCount.textContent = String(n);
   }
 
   private renderAll(): void {
@@ -289,9 +356,9 @@ export class Reviewer {
     }
 
     this.commentsApi.refresh();
-    this.toolbarApi.setFileName(this.store.state.fileName || (this.variant === 'full' ? '未打开文件' : ''));
-    this.toolbarApi.setCount(annotations.length);
-    this.toolbarApi.setUndoRedo(this.store.canUndo, this.store.canRedo);
+    this.toolbarApi?.setFileName(this.store.state.fileName || (this.variant === 'full' ? '未打开文件' : ''));
+    this.setBadgeCount(annotations.length);
+    this.toolbarApi?.setUndoRedo(this.store.canUndo, this.store.canRedo);
   }
 
   private initTheme(): void {
@@ -316,39 +383,51 @@ export class Reviewer {
     this.disposers.push(() => media.removeEventListener('change', onChange));
   }
 
-  /** document 选区 → 本实例的浮动菜单 / 正文滚动时隐藏 */
+  /**
+   * document 选区 → 本实例的浮动菜单 / 正文滚动时隐藏。
+   * 用 setTimeout(0) 合并而非 rAF：宿主把窗口置于后台/被遮挡时 rAF 停摆
+   * （实测 dsh 桌面壳最小化即如此），菜单会彻底不出现。
+   */
   private installSelectionBridge(): void {
     this.menuApi = createSelectionMenu(this);
-    let rafId = 0;
+    let timer = 0;
     const onSelectionChange = (): void => {
-      if (rafId) cancelAnimationFrame(rafId);
-      rafId = requestAnimationFrame(() => {
-        rafId = 0;
+      if (timer) window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        timer = 0;
         const sel = window.getSelection();
         if (!sel || sel.isCollapsed || sel.rangeCount === 0 || !this.store.state.source) {
           this.menuApi.hide();
+          this.capturedCtx = null;
           return;
         }
         const range = sel.getRangeAt(0);
         if (!this.preview.contains(range.commonAncestorContainer)) {
           this.menuApi.hide();
+          this.capturedCtx = null;
           return;
         }
         const rect = range.getBoundingClientRect();
         if (rect.width === 0 && rect.height === 0) {
           this.menuApi.hide();
+          this.capturedCtx = null;
           return;
         }
         this.menuApi.show(rect);
-      });
+        // 菜单可见期间保留选区快照：宿主焦点管理偷走 DOM 选区时按钮仍可用
+        this.capturedCtx = readContext();
+      }, 0);
     };
     document.addEventListener('selectionchange', onSelectionChange);
     this.disposers.push(() => {
       document.removeEventListener('selectionchange', onSelectionChange);
-      if (rafId) cancelAnimationFrame(rafId);
+      if (timer) window.clearTimeout(timer);
     });
 
-    const onScroll = (): void => this.menuApi.hide();
+    const onScroll = (): void => {
+      this.menuApi.hide();
+      this.capturedCtx = null;
+    };
     this.previewWrap.addEventListener('scroll', onScroll, { passive: true });
     this.disposers.push(() => this.previewWrap.removeEventListener('scroll', onScroll));
   }
@@ -409,8 +488,10 @@ export class Reviewer {
         if (!ok) this.notify(e.shiftKey ? '没有可重做的操作' : '没有可撤销的操作');
         return;
       }
-      // 单键批注：D 删除 / S 替换 / H 高亮 / C 评论 / I 插入（需正文选区）
-      if (!e.metaKey && !e.ctrlKey && !e.altKey && this.store.state.source && this.selectionInPreview()) {
+      // 单键批注：D 删除 / S 替换 / H 高亮 / C 评论 / I 插入（需正文选区或可见菜单）：
+      // 宿主偷选区的场景下，菜单可见（capturedCtx 在）即允许触发
+      if (!e.metaKey && !e.ctrlKey && !e.altKey && this.store.state.source
+        && (this.selectionInPreview() || this.capturedCtx !== null)) {
         const type = Reviewer.SINGLE_KEY_ANNOTATIONS[key];
         if (type) {
           e.preventDefault();
