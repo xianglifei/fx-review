@@ -89,3 +89,30 @@ describe('source-map 转义容错', () => {
     expect(src.slice(p2.start, p2.end)).toBe('段落二正常');
   });
 });
+
+describe('source-map 表格对齐', () => {
+  const src = '| 日期 | 天气 |\n|---|---|\n| 9月23日 | **多云** 有阵雨 |\n| 9月24日 | 晬 \\| 晬 |\n\n表格后的段落。\n';
+
+  it('表头与正文单元格文本都有 data-o 且偏移指向源码', () => {
+    expect(src.slice(...spanOf(src, '日期').start !== undefined ? [spanOf(src, '日期').start, spanOf(src, '日期').end] : [0, 0])).toBe('日期');
+    const cell = spanOf(src, '9月23日');
+    expect(src.slice(cell.start, cell.end)).toBe('9月23日');
+  });
+
+  it('单元格内加粗文本偏移不含 ** 标记，且同格后续文本不漂移', () => {
+    const bold = spanOf(src, '多云');
+    expect(src.slice(bold.start, bold.end)).toBe('多云');
+    const after = spanOf(src, ' 有阵雨');
+    expect(src.slice(after.start, after.end)).toBe(' 有阵雨');
+  });
+
+  it('转义竖线单元格（\\|）按字面内容对齐（渲染后 \| 显示为 |）', () => {
+    const cell2 = spanOf(src, '晬 | 晬');
+    expect(src.slice(cell2.start, cell2.end)).toBe('晬 \\| 晬');
+  });
+
+  it('表格后段落的偏移不受表格影响', () => {
+    const tail = spanOf(src, '表格后的段落。');
+    expect(src.slice(tail.start, tail.end)).toBe('表格后的段落。');
+  });
+});

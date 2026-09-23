@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+### Added
+
+- **表格内容可批注（网页版与 dsh 插件同时受益）**：此前偏移映射只覆盖带行号 map 的块级 token，而 markdown-it 的表格单元格 inline token 不带 map——表格里的文字从未真正可批注（选区端点落不进任何 data-o span，五种操作全部报「请先选中要批注的文字」）。现在 source-map 感知表格行（`tr_open` 的行号 map + 行源码按未转义竖线切格），对每个单元格做与段落同一套的 inline 对齐；支持单元格内加粗/行内代码/转义竖线 `\|`。代码块（fence）仍不参与批注（内容非 inline token，维持既有说明）。
+
+## [Unreleased]
+
 ### Fixed
 
 - **dsh 插件评论条目占高异常（大片空白）**：dsh 文档预览容器自带 `white-space: pre-wrap`（为纯文本预览设计），插件组件继承后 innerHTML 模板里的缩进换行被渲染成大段空白，每条批注被撑高数倍。修复：`.fxr-root` 显式恢复 `white-space: normal`（需要 pre-wrap 的引用块等自行声明）。

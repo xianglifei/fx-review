@@ -149,15 +149,78 @@ function alignInline(
   }
 }
 
+/**
+ * 把表格行源码按未转义竖线切成各单元格的源码切片。
+ * GFM 表格里 `\|` 是字面竖线，切分时跳过；返回切片在行内的 [start, end) 偏移。
+ */
+function tableCellSlices(rowSrc: string): Array<{ start: number; end: number }> {
+  const slices: Array<{ start: number; end: number }> = [];
+  let cellStart = -1;
+  for (let i = 0; i < rowSrc.length; i++) {
+    const ch = rowSrc[i];
+    if (ch === '\\' && i + 1 < rowSrc.length) {
+      i++;
+      continue;
+    }
+    if (ch === '|') {
+      if (cellStart >= 0) slices.push({ start: cellStart, end: i });
+      cellStart = i + 1;
+    }
+  }
+  if (cellStart >= 0 && cellStart <= rowSrc.length) {
+    slices.push({ start: cellStart, end: rowSrc.length });
+  }
+  return slices;
+}
+
 function computeOffsets(tokens: Token[], src: string): void {
   const starts = lineStarts(src);
+
+  // 表格感知：markdown-it 的表格单元格 inline token 不带 map（只有 tr_open 带
+  // 行号），逐格用行源码切片做与段落同一套的 inline 对齐——否则表格内容全部
+  // 无法批注（选区端点落不进任何 data-o span）
+  let rowMap: [number, number] | null = null;
+  let cellIndex = 0;
+
   for (const tok of tokens) {
-    if (tok.type !== 'inline' || !tok.map || !tok.children) continue;
-    const [begin, end] = tok.map;
-    const absStart = starts[begin] ?? 0;
-    const absEnd = starts[end] ?? src.length;
-    const blockSrc = src.slice(absStart, absEnd);
-    alignInline(blockSrc, absStart, tok.children);
+    if (tok.type === 'tr_open' && tok.map) {
+      rowMap = [tok.map[0], tok.map[1]];
+      cellIndex = 0;
+      continue;
+    }
+    if (tok.type === 'tr_close' || tok.type === 'table_close') {
+      rowMap = null;
+      cellIndex = 0;
+      continue;
+    }
+    if (tok.type !== 'inline' || !tok.children) continue;
+
+    if (tok.map) {
+      const [begin, end] = tok.map;
+      const absStart = starts[begin] ?? 0;
+      const absEnd = starts[end] ?? src.length;
+      const blockSrc = src.slice(absStart, absEnd);
+      alignInline(blockSrc, absStart, tok.children);
+      continue;
+    }
+
+    if (rowMap !== null) {
+      // 表格单元格：行首行号 → 行源码 → 按竖线取第 cellIndex 格
+      const [begin, end] = rowMap;
+      const rowAbsStart = starts[begin] ?? 0;
+      const rowAbsEnd = starts[end] ?? src.length;
+      const rowSrc = src.slice(rowAbsStart, rowAbsEnd);
+      const cells = tableCellSlices(rowSrc);
+      const cell = cells[cellIndex];
+      cellIndex += 1;
+      if (cell) {
+        alignInline(
+          rowSrc.slice(cell.start, cell.end),
+          rowAbsStart + cell.start,
+          tok.children,
+        );
+      }
+    }
   }
 }
 
