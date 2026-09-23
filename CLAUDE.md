@@ -22,6 +22,11 @@ fx-review 是受 [easychen/markmark](https://github.com/easychen/markmark) 启�
 
 技术栈：Vite + 原生 TypeScript，唯一运行时依赖 `markdown-it`。核心机制见 README“工作原理”与 `src/render/source-map.ts`。
 
+## 测试
+
+- `npm test`（vitest）：`tests/` 下分三组——source-map 偏移对齐、CriticMarkup 导出（`src/export/criticmarkup.ts` 的同位置标记排序是核心不变量，改动时必须保持相邻批注不交错）、DOM 侧降级渲染与选区解析（jsdom 环境）。
+- CI（GitHub Actions `.github/workflows/ci.yml`）在 push / PR 时跑 `npm test` + `npm run build`。
+
 ## 部署
 
 - 线上域名：`review.feixing.io`（Cloudflare Pages，项目名 `fx-review`，production branch `main`）

@@ -1,0 +1,9 @@
+# dsh-fx-review —— dsh bundle patch（激活声明）
+# dsh 启动时按 bundle 层栈叠加各插件 patch；本文件把插件插进 profile 的配置树，
+# 只有出现在配置树里的插件，其 dsh.client 客户端半层才会被 boot 扫描装载。
+#
+# 安装：dsh plugin add dsh-fx-review（npm）或本地开发
+#   dsh plugin --profile <name> add link:<本目录绝对路径>
+- insert:
+    - id: dsh-fx-review
+      name: dsh-fx-review

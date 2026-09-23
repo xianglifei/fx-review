@@ -39,7 +39,7 @@
 把本地 `.md` 文件**拖到窗口任意位置**，或点击页面中央的"打开 Markdown 文件"按钮。文件在浏览器本地读取，不会上传。
 
 ### 2. 做批注
-在渲染后的正文里**选中一段文字**，会同时出现两种操作入口：选区旁边的**浮动圆角菜单**（最快），以及顶部工具栏的 5 个批注按钮。
+在渲染后的正文里**选中一段文字**，会同时出现两种操作入口：选区旁边的**浮动圆角菜单**（最快），以及顶部工具栏的 5 个批注按钮。**选中文字后直接按单键**也可以：`D` 删除 / `S` 替换 / `H` 高亮 / `C` 评论 / `I` 插入。
 
 - **删除 / 高亮 / 评论**：选中文字后直接点对应按钮。
 - **替换**：选中文字后点"替换"，输入新文字；正文里显示 ~~旧文字~~ → 新文字。
@@ -57,8 +57,11 @@
 复制后粘贴到任意 AI 对话框即可；下载的 `.md` 文件可直接拖给 AI Agent。AI 会读懂 `{-- --}`（删）、`{++ ++}`（增）、`{~~ ~> ~~}`（换）等标记并输出修改后的完整文档。
 
 ### 其他
-- **清空批注**：一键清除全部批注，恢复原文预览。
-- **编辑 Prompt**：自定义"含 Prompt"导出时的引导词（会话内有效）。
+- **撤销 / 重做**：`⌘/Ctrl + Z` 撤销、`⌘/Ctrl + Shift + Z` 重做批注操作，也可用评论栏头部的按钮。
+- **自动保存**：批注保存在浏览器本地（localStorage），刷新或重新打开同一文件自动恢复；内容变化则视为新文档。
+- **编辑文字**：插入 / 替换批注的文字填错不用删掉重做，评论栏条目上点 ✎ 直接改。
+- **清空批注**：一键清除全部批注，恢复原文预览（可撤销）。
+- **编辑 Prompt**：自定义"含 Prompt"导出时的引导词，保存在本地浏览器。
 - **主题**：右上角切换明暗，默认跟随系统。
 
 ## 工作原理
@@ -66,15 +69,36 @@
 1. 用 markdown-it 渲染 Markdown，自定义渲染规则给每段渲染文本注入 `data-o="srcStart,srcEnd"`，把渲染 DOM 文本节点与源码字符偏移对齐。
 2. 选中文字时，通过 `data-o` 反向解析出源码区间。
 3. 显示层用 **CSS Custom Highlight API**（`::highlight`）着色，不修改渲染 DOM，因此反复批注不会让偏移漂移；插入类用 `<ins>` 节点点插入。
-4. 导出时按源码偏移降序插入 CriticMarkup 标记，合成完整文本。
+4. 代码块用 **Shiki** 静态高亮（遇到第一个代码块才按需加载，GitHub Light/Dark 双主题），不参与偏移映射。
+5. 导出时按源码偏移降序插入 CriticMarkup 标记，合成完整文本。
+6. Service Worker 缓存静态资源，可离线使用；批注存于浏览器 localStorage。
 
 > 浏览器支持：CSS Custom Highlight API 需 Chrome/Edge 105+、Safari 17+、Firefox 140+。不支持时自动降级为 `<mark>` 包裹。
+
+## dsh 插件（DeepSeek Harness 嵌入版）
+
+仓库内的 `dsh-plugin/` 是一个独立的 dsh 插件包 **dsh-fx-review**：把本工具的编辑器核心（`src/editor.ts` 的 Reviewer，与网页版共用同一份代码和样式）嵌进 [dsh](https://github.com/deepseek-ai/deepseek-harness) Web 界面右侧栏的 Markdown 文档预览。模型产出的 `.md` 文件直接在预览里选中文字做批注，一键复制批注全文（可带引导 Prompt）粘回会话，让模型按 CriticMarkup 标记修改——补上「产出 → 审阅 → 修改」闭环里最短的一段。
+
+- 打开 `.md` / `.markdown` / `.mdown` 默认进入批注模式（extension 优先级高于 dsh 内置渲染器；预览头部下拉可随时切回内置 Markdown）。
+- 文件一次性整读，批注偏移不因分页漂移；代码块为纯文本（插件不携带 Shiki，控制体积；代码块本就不参与批注定位）。
+- 批注按「文件名 + 内容哈希」存在浏览器 localStorage（前缀 `fx-review:embed:`，与网页版互不干扰），同文件重开自动恢复。
+- 主题跟随 dsh 明暗；快捷键、浮动菜单、撤销重做、评论栏抽屉与网页版一致。
+
+安装（需重启 dsh 生效）：
+
+```bash
+dsh plugin add dsh-fx-review          # npm（发布后）
+dsh plugin --profile <name> add link:<本仓库>/dsh-plugin   # 本地开发
+```
+
+构建：仓库根 `npm run build:plugin`（单文件 IIFE 产物 `dsh-plugin/lib/client.js`，embed.css 与 markdown-it 内联，React 由 dsh 宿主注入）。详见 [dsh-plugin/README.md](./dsh-plugin/README.md)。
 
 ## 开发
 
 ```bash
 npm install
 npm run dev      # 本地开发
+npm test         # 运行测试（vitest）
 npm run build    # 类型检查 + 产出 dist/
 npm run preview  # 预览构建产物
 ```
@@ -90,15 +114,13 @@ npm run preview  # 预览构建产物
 ## 技术栈
 
 - Vite + TypeScript（原生，无框架）
-- markdown-it（唯一运行时依赖）
+- markdown-it（渲染）、Shiki（代码高亮，按需加载）
 - Cloudflare Pages（静态托管）
 
 ## 后续计划（v1 未做）
 
-- Mermaid / PlantUML / KaTeX 渲染、Prism 代码高亮
-- 批注持久化（localStorage / 跨设备同步）
+- Mermaid / PlantUML / KaTeX 渲染
 - 多文件 / 标签页
-- 移动端适配
 
 ## License
 

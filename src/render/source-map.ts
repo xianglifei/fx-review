@@ -176,11 +176,12 @@ function wrap(content: string, tok: Token): string {
   return `<span data-o="${r.start},${r.end}">${escaped}</span>`;
 }
 
-let installed = false;
+/** 按 md 实例记忆安装状态（多实例嵌入时各自都要装上偏移规则） */
+const installed = new WeakSet<MarkdownIt>();
 
 export function installSourceMap(md: MarkdownIt): void {
-  if (installed) return;
-  installed = true;
+  if (installed.has(md)) return;
+  installed.add(md);
 
   const textRule = md.renderer.rules.text;
   md.renderer.rules.text = (tokens, idx) => {

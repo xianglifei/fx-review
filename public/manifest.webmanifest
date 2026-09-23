@@ -1,0 +1,24 @@
+{
+  "name": "fx-review · Markdown 批注审阅",
+  "short_name": "fx-review",
+  "description": "网页版 Markdown 批注审阅工具，用 CriticMarkup 批注文字，一键交给 AI 修改。文件不上传，全部在浏览器本地完成。",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#fafafa",
+  "theme_color": "#2563eb",
+  "icons": [
+    {
+      "src": "./favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "./icon-maskable.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}

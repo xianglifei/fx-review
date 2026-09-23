@@ -33,11 +33,11 @@ export interface DocState {
 
 export const ANNOTATION_META: Record<
   AnnotationType,
-  { label: string; icon: string; title: string }
+  { label: string; icon: string; title: string; key: string }
 > = {
-  insertion: { label: '插入', icon: '➕', title: '插入新文字' },
-  deletion: { label: '删除', icon: '✂️', title: '标记为删除' },
-  substitution: { label: '替换', icon: '🔁', title: '替换为新文字' },
-  highlight: { label: '高亮', icon: '🔆', title: '高亮关注' },
-  comment: { label: '评论', icon: '💬', title: '添加评论' },
+  insertion: { label: '插入', icon: '➕', title: '插入新文字', key: 'I' },
+  deletion: { label: '删除', icon: '✂️', title: '标记为删除', key: 'D' },
+  substitution: { label: '替换', icon: '🔁', title: '替换为新文字', key: 'S' },
+  highlight: { label: '高亮', icon: '🔆', title: '高亮关注', key: 'H' },
+  comment: { label: '评论', icon: '💬', title: '添加评论', key: 'C' },
 };

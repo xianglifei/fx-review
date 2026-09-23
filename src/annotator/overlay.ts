@@ -52,14 +52,20 @@ function collectSpans(preview: HTMLElement): { el: Element; s: number; e: number
   return out;
 }
 
-/** 源码偏移 → 该偏移所在的 data-o span 与其中的 DOM 点 */
+/** 源码偏移 → 该偏移所在的 data-o span 与其中的 DOM 点。
+ *  边界偏移会同时命中“前一个 span 的末尾”与“后一个 span 的开头”：
+ *  start 取后一个（区间起点），end 取前一个（区间终点），
+ *  使 Range 不跨 span，降级 mark 包裹才不会因部分包含而失败。 */
 function sourceToDomPoint(
   preview: HTMLElement,
   offset: number,
+  side: 'start' | 'end' | 'any' = 'any',
 ): DomPoint | null {
   const spans = collectSpans(preview);
-  // 优先找严格包含 offset 的 span
-  let hit = spans.find((sp) => sp.s <= offset && offset <= sp.e);
+  let hit: { el: Element; s: number; e: number } | undefined;
+  if (side === 'start') hit = spans.find((sp) => sp.s === offset);
+  else if (side === 'end') hit = spans.find((sp) => sp.e === offset);
+  hit ??= spans.find((sp) => sp.s <= offset && offset <= sp.e);
   if (!hit) {
     // 否则取 offset 之前最近的 span 末尾
     const before = spans.filter((sp) => sp.e <= offset).pop();
@@ -76,8 +82,8 @@ function sourceToRange(
   start: number,
   end: number,
 ): Range | null {
-  const sp = sourceToDomPoint(preview, start);
-  const ep = sourceToDomPoint(preview, end);
+  const sp = sourceToDomPoint(preview, start, 'start');
+  const ep = sourceToDomPoint(preview, end, 'end');
   if (!sp || !ep) return null;
   const r = new Range();
   try {
@@ -103,14 +109,32 @@ try {
   supportsHighlight = false;
 }
 
-/** 重绘全部批注的显示 */
-export function renderOverlay(preview: HTMLElement, annotations: Annotation[]): void {
-  // 清理旧的插入型显示节点（插入/替换新文字），统一用 .cm-inserted 标记，确保全部移除
+/** 高亮注册名加上实例命名空间：CSS.highlights 是文档级全局注册表，
+ *  同页多实例（如 dsh 里多个预览 tab）必须各用各的名字互不覆盖。
+ *  ns 为空串时保持网页壳的静态 CSS 名（cm-del 等）。 */
+function qualify(name: string, ns: string): string {
+  return ns ? `${ns}-${name}` : name;
+}
+
+/** 重绘全部批注的显示。ns 为该实例的 highlight 命名空间（见 qualify） */
+export function renderOverlay(
+  preview: HTMLElement,
+  annotations: Annotation[],
+  ns = '',
+): void {
+  // 清理旧的显示节点：插入/替换新文字节点直接移除；降级 <mark> 展开还原文本节点，
+  // 恢复 data-o span 的“直接子文本节点”结构，避免重复堆积与选区偏移漂移
   preview.querySelectorAll('.cm-inserted').forEach((n) => n.remove());
+  preview.querySelectorAll('mark.cm-fallback').forEach((m) => {
+    m.replaceWith(...Array.from(m.childNodes));
+  });
   preview.normalize();
 
   if (supportsHighlight) {
-    CSS.highlights.clear();
+    // 只清自己的名字（ns 非空时），不动其他实例（如宿主页面）的 highlight
+    for (const name of Object.values(RANGE_GROUPS)) {
+      CSS.highlights.delete(qualify(name, ns));
+    }
     const buckets: Record<string, Range[]> = {};
     for (const a of annotations) {
       if (a.type === 'insertion') continue; // 插入无区间
@@ -122,31 +146,41 @@ export function renderOverlay(preview: HTMLElement, annotations: Annotation[]): 
     }
     for (const [name, ranges] of Object.entries(buckets)) {
       const h = new Highlight(...ranges);
-      CSS.highlights.set(name, h);
+      CSS.highlights.set(qualify(name, ns), h);
     }
   } else {
-    // 不支持 Highlight API 的浏览器：降级为 <mark> 包裹
+    // 不支持 Highlight API 的浏览器：降级为 <mark> 包裹。
+    // 先解析全部区间再包裹：包裹会移动文本节点，边做边解析会让
+    // 后续批注的偏移因前面 mark 的插入而失效。
+    const jobs: { range: Range; a: Annotation }[] = [];
     for (const a of annotations) {
       if (a.type === 'insertion') continue;
       const r = sourceToRange(preview, a.srcStart, a.srcEnd);
-      if (!r) continue;
+      if (r) jobs.push({ range: r, a });
+    }
+    for (const { range, a } of jobs) {
       const mark = document.createElement('mark');
       mark.className = `cm-fallback cm-fallback-${a.type}`;
       try {
-        r.surroundContents(mark);
+        range.surroundContents(mark);
       } catch {
-        surroundAcross(r, mark);
+        surroundAcross(range, mark);
       }
     }
   }
 
-  // 插入型显示节点
+  // 显示节点：替换的“→ 新文字”（替换区间互不重叠，顺序无关）
   for (const a of annotations) {
+    if (a.type === 'substitution') {
+      // 旧文字已由 cm-sub-old 高亮（红删除线）；在其后插入“→ 新文字”
+      insertDisplayNode(preview, a.srcEnd, 'span', 'cm-sub-new cm-inserted', a.replacement ?? '', true);
+    }
+  }
+  // 插入节点：同一插入点倒序插入（insertNode 总插在插入点最前），使显示顺序与创建/导出顺序一致
+  for (let i = annotations.length - 1; i >= 0; i--) {
+    const a = annotations[i];
     if (a.type === 'insertion') {
       insertDisplayNode(preview, a.srcStart, 'ins', 'cm-ins cm-inserted', a.insertedText ?? '');
-    } else if (a.type === 'substitution') {
-      // 旧文字已由 cm-sub-old 高亮（红删除线）；在其后插入" → 新文字"
-      insertDisplayNode(preview, a.srcEnd, 'span', 'cm-sub-new cm-inserted', a.replacement ?? '', true);
     }
   }
 }
@@ -213,7 +247,11 @@ export function highlightApiSupported(): boolean {
 }
 
 /** 滚动定位到某条批注并短暂闪烁（评论栏点击用） */
-export function flashAnnotation(preview: HTMLElement, a: Annotation): void {
+export function flashAnnotation(
+  preview: HTMLElement,
+  a: Annotation,
+  ns = '',
+): void {
   if (a.type === 'insertion') {
     // 定位到插入点
     const point = sourceToDomPoint(preview, a.srcStart);
@@ -221,22 +259,43 @@ export function flashAnnotation(preview: HTMLElement, a: Annotation): void {
       const range = new Range();
       range.setStart(point.node, point.offset);
       range.collapse(true);
-      flashRange(range);
+      flashRange(preview, range, ns);
     }
     return;
   }
   const r = sourceToRange(preview, a.srcStart, a.srcEnd);
-  if (r) flashRange(r);
+  if (r) flashRange(preview, r, ns);
 }
 
-function flashRange(range: Range): void {
+/** 找最近的可滚动祖先（页面滚动发生在 .preview-wrap 等容器上，而非 window） */
+function findScrollContainer(el: HTMLElement): HTMLElement | null {
+  for (let p = el.parentElement; p; p = p.parentElement) {
+    if (p.scrollHeight > p.clientHeight) {
+      const oy = getComputedStyle(p).overflowY;
+      if (oy === 'auto' || oy === 'scroll') return p;
+    }
+  }
+  return null;
+}
+
+function flashRange(preview: HTMLElement, range: Range, ns: string): void {
   const rect = range.getBoundingClientRect();
-  const top = rect.top + window.scrollY - window.innerHeight / 2;
-  window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+  const container = findScrollContainer(preview);
+  if (container) {
+    const containerTop = container.getBoundingClientRect().top;
+    const target =
+      container.scrollTop + (rect.top - containerTop) - container.clientHeight / 2;
+    container.scrollTo({ top: Math.max(0, target), behavior: 'smooth' });
+  } else {
+    window.scrollTo({
+      top: Math.max(0, rect.top + window.scrollY - window.innerHeight / 2),
+      behavior: 'smooth',
+    });
+  }
   // 临时绘制一个闪烁高亮（不支持 Highlight API 时仅滚动定位）
   if (supportsHighlight) {
     const h = new Highlight(range);
-    const name = 'cm-flash';
+    const name = qualify('cm-flash', ns);
     CSS.highlights.set(name, h);
     window.setTimeout(() => CSS.highlights.delete(name), 1200);
   }
